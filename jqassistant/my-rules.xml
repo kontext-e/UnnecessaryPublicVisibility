@@ -1,0 +1,50 @@
+<jqa:jqassistant-rules xmlns:jqa="http://www.buschmais.com/jqassistant/core/analysis/rules/schema/v1.0">
+
+    <concept id="PublicMethod">
+        <cypher>
+            MATCH
+            (c:Type:Class)-[:DECLARES]->(m:Method)
+            WHERE
+            m.visibility='public'
+            SET
+            m:Public
+            RETURN
+            c.fqn+"."+m.name as PublicMethod
+        </cypher>
+    </concept>
+
+    <concept id="PublicMethodUsedFromDifferentPackage">
+        <requiresConcept refId="PublicMethod" />
+        <cypher><![CDATA[
+            MATCH
+            (t1:Type)-[:DECLARES]->(m:Method),
+            (t2:Type)-[:DECLARES]->(p:Method:Public),
+            (package1:Package)-[:CONTAINS]->(t1),
+            (package2:Package)-[:CONTAINS]->(t2),
+            (m)-[:INVOKES]->(p)
+            WHERE
+            package1.fqn <> package2.fqn
+            SET p:UsedFromDifferentPackage
+            return p.name
+        ]]></cypher>
+    </concept>
+
+    <constraint id="PublicMethodsCalledFromDifferentPackage">
+        <requiresConcept refId="PublicMethod" />
+        <requiresConcept refId="PublicMethodUsedFromDifferentPackage" />
+        <description>Make a method only public if it is called from a different package.</description>
+        <cypher><![CDATA[
+            MATCH
+            (c:Type)-[:DECLARES]->(u:Method:Public)
+            WHERE NOT
+            u:UsedFromDifferentPackage
+            RETURN
+            c.fqn, u.name
+        ]]></cypher>
+    </constraint>
+
+    <group id="default">
+        <includeConstraint refId="PublicMethodsCalledFromDifferentPackage" severity="major" />
+    </group>
+
+</jqa:jqassistant-rules>
